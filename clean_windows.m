@@ -126,6 +126,7 @@ removed_samples = repmat(offsets(removed_windows)',1,length(wnd))+repmat(wnd,len
 % mask them out
 sample_mask = true(1,S); 
 sample_mask(removed_samples(:)) = false;
+EEG.etc.BadSegRej1 = []; %initialize it
 if(~isempty(EEG.etc.BadSegRej1))
 EEG.etc.BadSegRej2 = [100*(mean(sample_mask)) "%",nnz(sample_mask)/signal.srate " seconds"];
 end
