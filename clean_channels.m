@@ -1,6 +1,6 @@
 function [signal,removed_channels] = clean_channels(signal,corr_threshold,noise_threshold,window_len,max_broken_time,num_samples,subset_size)
 % Remove channels with abnormal data from a continuous data set.
-% Signal = clean_channels(Signal,CorrelationThreshold,WindowLength,MaxBrokenTime,NumSamples,SubsetSize,UseGPU)
+% Signal = clean_channels(Signal,CorrelationThreshold,LineNoiseThreshold,WindowLength,MaxBrokenTime,NumSamples,SubsetSize)
 %
 % This is an automated artifact rejection function which ensures that the data contains no channels
 % that record only noise for extended periods of time. If channels with control signals are
@@ -73,12 +73,12 @@ subset_size = round(subset_size*size(signal.data,1));
 if max_broken_time > 0 && max_broken_time < 1  %#ok<*NODEF>
     max_broken_time = size(signal.data,2)*max_broken_time;
 else
-    max_broken_time = signal.srate*max_broken_time;
+    max_broken_time = round(signal.srate)*max_broken_time;
 end
 
 signal.data = double(signal.data);
 [C,S] = size(signal.data);
-window_len = window_len*signal.srate;
+window_len = window_len*round(signal.srate);
 wnd = 0:window_len-1;
 offsets = 1:window_len:S-window_len;
 W = length(offsets);

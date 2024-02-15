@@ -205,13 +205,6 @@ end
 
 % ignore some channels
 if ~isempty(channels)
-    if ~iscell(channels)
-        error('Cannot exclude channels without channel labels')
-    end
-    oriEEG = EEG;
-    EEG = pop_select(EEG, 'channel', channels);
-end
-if ~isempty(channels)
     if ~isempty(channels_ignore)
         error('Can include or ignore channel but not both at the same time')
     end
@@ -220,6 +213,7 @@ if ~isempty(channels)
     end
     oriEEG = EEG;
     EEG = pop_select(EEG, 'channel', channels);
+    EEG.event = []; % will be added back later
 end
 if ~isempty(channels_ignore)
     if ~iscell(channels_ignore)
@@ -227,12 +221,14 @@ if ~isempty(channels_ignore)
     end
     oriEEG = EEG;
     EEG = pop_select(EEG, 'nochannel', channels_ignore);
+    oriEEG_without_ignored_channels = EEG;
+    EEG.event = []; % will be added back later
 end
 
 % remove flat-line channels
 if ~strcmp(flatline_crit,'off')
-    disp('Detecting flat line...')
-    EEG = clean_flatlines(EEG,flatline_crit); 
+    disp('Applying highpass filter...')
+    EEG = clean_flatlines(EEG,flatline_crit);
 end
 
 % high-pass filter the data
@@ -245,6 +241,9 @@ if nargout > 1
 end
 
 % remove noisy channels by correlation and line-noise thresholds
+oldSrate = EEG.srate;
+EEG.srate = round(EEG.srate);
+removed_channels = [];
 if ~strcmp(chancorr_crit,'off') || ~strcmp(line_crit,'off') %#ok<NODEF>
     if strcmp(chancorr_crit,'off')
         chancorr_crit = 0; end
@@ -267,27 +266,52 @@ if ~strcmp(burst_crit,'off')
     if ~strcmpi(distance2, 'euclidian')    
         BUR = clean_asr(EEG,burst_crit,[],[],[],burst_crit_refmaxbadchns,burst_crit_reftolerances,[], [], true, max_mem); 
     else
-        BUR = clean_asr(EEG,burst_crit,[],[],[],burst_crit_refmaxbadchns,burst_crit_reftolerances,[], [], false, max_mem); 
+        try
+            BUR = clean_asr(EEG,burst_crit,[],[],[],burst_crit_refmaxbadchns,burst_crit_reftolerances,[], [], false, max_mem); 
+        catch
+            lasterr
+            return
+        end
     end
 
     if strcmp(burst_rejection,'on')
         % portion of data which have changed
-        sample_mask = sum(abs(EEG.data-BUR.data),1) < 1e-10;
+        sample_mask = sum(abs(EEG.data-BUR.data),1) < 1e-8;
 
         % find latency of regions
         retain_data_intervals = reshape(find(diff([false sample_mask false])),2,[])';
         retain_data_intervals(:,2) = retain_data_intervals(:,2)-1;
 
+        % remove small intervals
+        if ~isempty(retain_data_intervals)
+            smallIntervals = diff(retain_data_intervals')' < 5;
+            for iInterval = find(smallIntervals)'
+                sample_mask(retain_data_intervals(iInterval,1):retain_data_intervals(iInterval,2)) = 0;
+            end
+            retain_data_intervals(smallIntervals,:) = [];
+        end
+
         % reject regions
         EEG = pop_select(EEG, 'point', retain_data_intervals);
         EEG.etc.clean_sample_mask = sample_mask;
+
+        % check
+        try
+            res = checksamples(EEG);
+            if res.CleanBoundaryMatch == 0
+                fprintf(2, 'Your data is fine, but upon double checking the removed portions of data, there is\n');
+                fprintf(2, 'a small discrepency; if you can reproduce the warning message, send us your dataset.\n');
+            end
+        catch, end
     else
         EEG = BUR;
     end
 end
+EEG.srate = oldSrate;
 
 if nargout > 2
-    BUR = EEG; end
+    BUR = EEG; 
+end
 
 % remove irrecoverable time windows based on power
 if ~strcmp(window_crit,'off') && ~strcmp(window_crit_tolerances,'off')
@@ -298,33 +322,68 @@ disp('Use vis_artifacts to compare the cleaned data to the original.');
 
 % add back original channels
 if ~isempty(channels) || ~isempty(channels_ignore)
-   
+    if ~isempty(removed_channels)
+        removed_channels = { oriEEG_without_ignored_channels.chanlocs(removed_channels).labels };
+    end
+
     % Apply same transformation to the data before removal of channels and data
     EEG = eeg_checkset(EEG, 'eventconsistency');
     if ~isempty(EEG.event) && isfield(EEG.event, 'type') && isstr(EEG.event(1).type)
         disp('Adding back removed channels');
-        boundaryEvents = strmatch( 'boundary', { EEG.event.type },  'exact');
+
+        boundaryEvents = eeg_findboundaries(EEG);
         
         % remove again data portions
-        boundloc = [ EEG.event(boundaryEvents).latency ];
-        dur      = [ EEG.event(boundaryEvents).duration ];
-        cumdur   = cumsum(dur);
-        boundloc = boundloc + [0 cumdur(1:end-1) ];
-        boundloc = [ boundloc; boundloc+dur-1]';
-        oriEEG = eeg_eegrej(oriEEG, ceil(boundloc));
-        oriEEG.event = EEG.event;
-        
+        if ~isempty(boundaryEvents)
+            boundloc = [ EEG.event(boundaryEvents).latency ];
+            dur      = [ EEG.event(boundaryEvents).duration ];
+            cumdur   = cumsum(dur);
+            boundloc = boundloc + [0 cumdur(1:end-1) ];
+            boundloc = [ boundloc; boundloc+dur-1]';
+            oriEEG = eeg_eegrej(oriEEG, ceil(boundloc));
+        end
+
         % copy clean data to oriEEG (in case data was corrected
         [~,chanInds1, chanInds2] = intersect({ oriEEG.chanlocs.labels }, { EEG.chanlocs.labels });
         if size(oriEEG.data,2) ~= size(EEG.data,2)
-            error('Issue with adding back channels removed. Send us your data.');
+            error('Issue with adding back removed channels. Remove channels, then remove bad portions of data.');
         end
         oriEEG.data(chanInds1,:) = EEG.data(chanInds2,:);
         oriEEG.pnts = EEG.pnts;
 
         EEG = oriEEG;
+        if ~isempty(removed_channels)
+            EEG = pop_select(EEG, 'rmchannel', removed_channels);
+        end
     end
     
 end
 
+%creates a structure summarizing if Assumptions 2 and 4 are true or false
+%for each dataset in my study
+function CleanSampleMismatch = check_rm_samples(EEG)
+
+CleanSampleMismatch.oldLength = length(EEG.etc.clean_sample_mask);
+CleanSampleMismatch.newLength = EEG.pnts;
+CleanSampleMismatch.maskSum = sum(EEG.etc.clean_sample_mask);
+
+if EEG.pnts ~= sum(EEG.etc.clean_sample_mask)    %tests Assumption 2
+    CleanSampleMismatch.CleanMaskMatch = 0;
+else
+    CleanSampleMismatch.CleanMaskMatch = 1;
+end
+
+CleanSampleMismatch.boundaryDuration = 0;
+for j = 1: length(EEG.event)                 %finds total duration of boundary events
+    if strcmp(EEG.event(j).type, 'boundary')
+        CleanSampleMismatch.boundaryDuration = CleanSampleMismatch.boundaryDuration + EEG.event(j).duration;
+    end
+end
+CleanSampleMismatch.nonBoundaryLength = length(EEG.etc.clean_sample_mask) - CleanSampleMismatch.boundaryDuration;
+
+if EEG.pnts ~= CleanSampleMismatch.nonBoundaryLength %tests Assumption 4
+    CleanSampleMismatch.CleanBoundaryMatch = 0;
+else
+    CleanSampleMismatch.CleanBoundaryMatch = 1;
+end
 

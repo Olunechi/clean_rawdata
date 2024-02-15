@@ -87,3 +87,9 @@ v2.5 - move asr_calibrate out of the private folder so it can be used directly
 v2.6 - allowing to exclude channels and a variety of small bug fixes
 
 v2.7 - allowing to fuse channel rejection for datasets with same subject and session (STUDY processing)
+
+v2.8 - better error messages, and fix excluding channels (there was a rare crash)
+
+v2.9 - fix bug when ignoring channels and removing channels at the same time, fix plotting issue with vis_artifact
+
+v2.91 - add support for fractional sampling rate; fix too many splits with high sampling frequencies

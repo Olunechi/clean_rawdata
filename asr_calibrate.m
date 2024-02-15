@@ -152,7 +152,7 @@ if nargin < 6 || isempty(A) || isempty(B)
             case 512
                 [B,A] = deal([2.3275475636130865 -12.2166478485960430  30.1632789058248850 -45.8009842020820410  46.7261263011068880 -32.7796858196767220  15.4623349612560630  -4.5019779685307473   0.6242733481676324],[1.0000000000000000  -4.7827378944258703  10.9780696236622980 -15.6795187888195360  15.1281978667576310 -10.0632079834518220   4.5014690636505614  -1.2394100873286753   0.1614727510688058]);
             otherwise
-                error('repair_bursts:NoYulewalk','The yulewalk() function was not found and there is no pre-computed spectral filter for your sampling rate. If you would like to use the default spectral filter please try to resample to one of the supported rates (100,128,200,256,300,500,512) or get the appropriate toobox license (you can also disable the spectral weighting feature or supply your own precalculated IIR filter coefficients).');
+                error('repair_bursts:NoYulewalk','The yulewalk() function was not found and there is no pre-computed spectral filter for your sampling rate. If you would like to use the default spectral filter please try to resample to one of the supported rates (100,128,200,256,300,500,512) or get the "Signal Processing Toolbox" license (you can also disable the spectral weighting feature or supply your own precalculated IIR filter coefficients).');
         end
     end
 end
@@ -180,12 +180,14 @@ for k=1:blocksize
 end
 
 % get the mixing matrix M
-M = sqrtm(real(reshape(block_geometric_median(U/blocksize),C,C)));
+med = block_geometric_median(U/blocksize);
+if isnan(med(1)) && size(U,2) == 1, med = median(U); end
+M = sqrtm(real(reshape(med,C,C)));
 
 % window length for calculating thresholds
 N = round(window_len*srate);
 if S < N
-    error('No enough reference data, call the function from the command line and try changing the ''BurstCriterionRefTolerances'' parameters (to -10 to 10 for example)')
+    error('No enough reference data, call the function from the command line and try changing the ''BurstCriterionRefTolerances'' parameters')
 end
 
 % get the threshold matrix T
@@ -197,6 +199,9 @@ for c = C:-1:1
     rms = X(:,c).^2;
     rms = sqrt(sum(rms(bsxfun(@plus,round(1:N*(1-window_overlap):S-N),(0:N-1)')))/N);
     % fit a distribution to the clean part
+    if length(rms) == 1
+        error('No enough reference data, call the function from the command line and try changing the ''BurstCriterionRefTolerances'' parameters')
+    end
     [mu(c),sig(c)] = fit_eeg_distribution(rms,min_clean_fraction,max_dropout_fraction);
 end
 T = diag(mu + cutoff*sig)*V';
