@@ -126,6 +126,10 @@ removed_samples = repmat(offsets(removed_windows)',1,length(wnd))+repmat(wnd,len
 % mask them out
 sample_mask = true(1,S); 
 sample_mask(removed_samples(:)) = false;
+if(~isempty(EEG.etc.BadSegRej1))
+EEG.etc.BadSegRej2 = [100*(mean(sample_mask)) "%",nnz(sample_mask)/signal.srate " seconds"];
+end
+EEG.etc.BadSegRej1 = [100*(mean(sample_mask)) "%",nnz(sample_mask)/signal.srate " seconds"];
 fprintf('Keeping %.1f%% (%.0f seconds) of the data.\n',100*(mean(sample_mask)),nnz(sample_mask)/signal.srate);
 % determine intervals to retain
 retain_data_intervals = reshape(find(diff([false sample_mask false])),2,[])';
