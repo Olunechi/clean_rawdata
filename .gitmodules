@@ -1,3 +1,6 @@
 [submodule "manopt"]
 	path = manopt
 	url = https://github.com/NicolasBoumal/manopt.git
+[submodule "clean_rawdata"]
+	path = clean_rawdata
+	url = https://github.com/Olunechi/clean_rawdata
