@@ -126,11 +126,36 @@ removed_samples = repmat(offsets(removed_windows)',1,length(wnd))+repmat(wnd,len
 % mask them out
 sample_mask = true(1,S); 
 sample_mask(removed_samples(:)) = false;
-EEG.etc.BadSegRej1 = []; %initialize it
-if(~isempty(EEG.etc.BadSegRej1))
+% try
+%     evalin("base",'BadSegRej2');
+% catch e
+persistent BSR1;
+if(~isempty(BSR1))
+ BSR2 = [];
+% else
 EEG.etc.BadSegRej2 = [100*(mean(sample_mask)) "%",nnz(sample_mask)/signal.srate " seconds"];
+ BSR2 = EEG.etc.BadSegRej2;
+    % try
+        % BSR2 = EEG.etc.BadSegRej2;
+    assignin("base",'BadSegRej2',BSR2);
+    % catch e
+                % hlp_handleerror(e,1);
+    % end
+    BSR1 = [];
 else
-EEG.etc.BadSegRej1 = [100*(mean(sample_mask)) "%",nnz(sample_mask)/signal.srate " seconds"];
+ EEG.etc.BadSegRej1 = []; %initialize it
+    EEG.etc.BadSegRej1 = [100*(mean(sample_mask)) "%",nnz(sample_mask)/signal.srate " seconds"];
+    % try
+        BSR1 = EEG.etc.BadSegRej1;
+
+    assignin("base",'BadSegRej1',BSR1);
+    % catch e
+                % hlp_handleerror(e,1);
+    % end
+% EEG.etc.BadSegRej1 = [100*(mean(sample_mask)) "%",nnz(sample_mask)/signal.srate " seconds"];
+        % BSR1 = EEG.etc.BadSegRej1;
+
+    % assignin("base",'BadSegRej1',BSR1);
 end
 fprintf('Keeping %.1f%% (%.0f seconds) of the data.\n',100*(mean(sample_mask)),nnz(sample_mask)/signal.srate);
 % determine intervals to retain
